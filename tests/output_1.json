@@ -1,0 +1,35 @@
+{
+  "event": "contact_form_submitted",
+  "event_type": "form_submit",
+  "app_id": "cl_app_id_001",
+  "user_id": "cl_app_id_001-uid-001",
+  "message_id": "cl_app_id_001-uid-001",
+  "page_title": "Vegefoods - Free Bootstrap 4 Template by Colorlib",
+  "page_url": "http://shielded-eyrie-45679.herokuapp.com/contact-us",
+  "browser_language": "en-US",
+  "screen_size": "1920 x 1080",
+  "attributes": {
+    "form_varient": {
+      "value": "red_top",
+      "type": "string"
+    },
+    "ref": {
+      "value": "XPOWJRICW993LKJD",
+      "type": "string"
+    }
+  },
+  "traits": {
+    "name": {
+      "value": "iron man",
+      "type": "string"
+    },
+    "email": {
+      "value": "ironman@avengers.com",
+      "type": "string"
+    },
+    "age": {
+      "value": "32",
+      "type": "integer"
+    }
+  }
+}

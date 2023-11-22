@@ -1,0 +1,35 @@
+{
+  "event": "top_cta_clicked",
+  "event_type": "clicked",
+  "app_id": "cl_app_id_001",
+  "user_id": "cl_app_id_001-uid-001",
+  "message_id": "cl_app_id_001-uid-001",
+  "page_title": "Vegefoods - Free Bootstrap 4 Template by Colorlib",
+  "page_url": "http://shielded-eyrie-45679.herokuapp.com/contact-us",
+  "browser_language": "en-US",
+  "screen_size": "1920 x 1080",
+  "attributes": {
+    "button_text": {
+      "value": "Free trial",
+      "type": "string"
+    },
+    "color_variation": {
+      "value": "ESK0023",
+      "type": "string"
+    }
+  },
+  "traits": {
+    "user_score": {
+      "value": "1034",
+      "type": "number"
+    },
+    "gender": {
+      "value": "m",
+      "type": "string"
+    },
+    "tracking_code": {
+      "value": "POSERK093",
+      "type": "string"
+    }
+  }
+}
