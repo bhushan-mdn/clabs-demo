@@ -21,3 +21,5 @@
 go.work
 
 clabs-demo
+
+tmp/
