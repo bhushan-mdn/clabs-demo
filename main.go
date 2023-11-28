@@ -7,8 +7,8 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"regexp"
 	"os"
+	"regexp"
 	// "strings"
 )
 
@@ -34,14 +34,14 @@ const DEFAULT_INPUT_CHANNEL_SIZE = 10
 
 func setup() {
 
-    endpoint, ok := os.LookupEnv("WEBHOOK_ENDPOINT")
-    if !ok {
-        fmt.Println(
-            `Visit https://webhook.site to get a webhook endpoint, and set the environment variable
+	endpoint, ok := os.LookupEnv("WEBHOOK_ENDPOINT")
+	if !ok {
+		fmt.Println(
+			`Visit https://webhook.site to get a webhook endpoint, and set the environment variable
 WEBHOOK_ENDPOINT=https://webhook.site/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX`)
-        log.Fatalln("Exiting as WEBHOOK_ENDPOINT env variable is not set...")
-    }
-    config.WebhookEndpoint = endpoint
+		log.Fatalln("Exiting as WEBHOOK_ENDPOINT env variable is not set...")
+	}
+	config.WebhookEndpoint = endpoint
 }
 
 func main() {
@@ -66,34 +66,49 @@ func worker(id int, inputCh chan map[string]string) {
 	fmt.Println("worker", id, "started")
 	for input := range inputCh {
 		log.Println("worker", id, "processing request")
-		transformed := transformRequest(input)
-        state.InputsProcessed += 1
-		resp, err := json.Marshal(&transformed)
-		if err != nil {
-			fmt.Println("err marshalling", err)
-			return
-		}
+		resp, err := transformRequest(input)
+        if err != nil {
+		    log.Printf("Encountered an error: %v", err)
+            return
+        }
+		state.InputsProcessed += 1
 
-		sendToWebhook(bytes.NewReader(resp))
+		sendToWebhook(resp)
 	}
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
-	m := map[string]string{}
+	var m map[string]string
 
-	if err := json.NewDecoder(r.Body).Decode(&m); err != nil || len(m) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "Bad Request")
+	// Read request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if the request body contains valid JSON
+	if !json.Valid(body) {
+		http.Error(w, "Bad Request - Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Decode JSON into a map
+	if err := json.Unmarshal(body, &m); err != nil || len(m) == 0 {
+		http.Error(w, "Bad Request - Invalid JSON Format", http.StatusBadRequest)
 		return
 	}
 
 	fmt.Printf("%v\n", m)
+
+	// Perform asynchronous processing
 	go func() {
-		fmt.Println("sending request")
+		fmt.Println("Sending request")
 		inputCh <- m
-		fmt.Println("done")
+		fmt.Println("Done")
 	}()
 
+	// Respond with status 202 (Accepted)
 	w.WriteHeader(http.StatusAccepted)
 	fmt.Fprintf(w, "Accepted")
 }
@@ -104,8 +119,8 @@ type AttrSchema struct {
 	Type  string `json:"type"`
 }
 
-func (a *AttrSchema) SetVal(keyType string, value string) {
-	switch keyType {
+func (a *AttrSchema) SetVal(fieldName string, value string) {
+	switch fieldName {
 	case "k":
 		a.Key = value
 	case "t":
@@ -146,8 +161,7 @@ type AttrDesc struct {
 	Type  string `json:"type"`
 }
 
-func transformRequest(m map[string]string) map[string]interface{} {
-
+func transformRequest(m map[string]string) ([]byte, error) {
 	staticKeyMapping := map[string]string{
 		"ev":  "event",
 		"et":  "event_type",
@@ -159,73 +173,60 @@ func transformRequest(m map[string]string) map[string]interface{} {
 		"l":   "browser_language",
 		"sc":  "screen_size",
 	}
+	var req PartialReq
 
-	resp := make(map[string]interface{})
+	b, err := json.Marshal(m)
+    if err != nil {
+		log.Printf("Encountered an error: %v", err)
+    }
+	json.Unmarshal(b, &req)
+
+	var rs ResponseStruct
+
+	rs.Event = req.Ev
+	rs.EventType = req.Et
+	rs.AppID = req.ID
+	rs.UserID = req.UID
+	rs.MessageID = req.Mid
+	rs.PageTitle = req.T
+	rs.PageURL = req.P
+	rs.BrowserLanguage = req.L
+	rs.ScreenSize = req.Sc
+
+	for k := range staticKeyMapping {
+		delete(m, k)
+	}
 
 	attrs := make(map[string]AttrSchema)
 	uTraits := make(map[string]AttrSchema)
 
-	var rs ResponseStruct
-
 	for k, v := range m {
-		if k2, ok := staticKeyMapping[k]; ok {
-			resp[k2] = v
-		}
-		switch k {
-		case "ev":
-			rs.Event = v
-		case "et":
-			rs.EventType = v
-		case "id":
-			rs.AppID = v
-		case "uid":
-			rs.UserID = v
-		case "mid":
-			rs.MessageID = v
-		case "t":
-			rs.PageTitle = v
-		case "p":
-			rs.PageURL = v
-		case "l":
-			rs.BrowserLanguage = v
-		case "sc":
-			rs.ScreenSize = v
-		}
-
 		r := regexp.MustCompile("([u]*)atr([k,t,v])(\\d+)")
 		match := r.FindStringSubmatch(k)
-		var t string
+		var fieldName string
 		var idx string
-		var attrType string
+		var attributeType string
 		if len(match) > 3 {
-			attrType = match[1]
-			t = match[2]
+			attributeType = match[1]
+			fieldName = match[2]
 			idx = match[3]
 
-			var exi AttrSchema
-			var ok bool
-			if attrType == "u" {
-				exi, ok = uTraits[idx]
+			var attributeMap map[string]AttrSchema
+
+			if attributeType == "u" {
+				attributeMap = uTraits
 			} else {
-				exi, ok = attrs[idx]
+				attributeMap = attrs
 			}
 
-			if ok {
-				exi.SetVal(t, v)
-				if attrType == "u" {
-					uTraits[idx] = exi
-				} else {
-					attrs[idx] = exi
-				}
-			} else {
-				var a AttrSchema
-				a.SetVal(t, v)
-				if attrType == "u" {
-					uTraits[idx] = a
-				} else {
-					attrs[idx] = a
-				}
+			existingAttribute, found := attributeMap[idx]
+			if !found {
+				existingAttribute = AttrSchema{}
 			}
+
+			existingAttribute.SetVal(fieldName, v)
+			attributeMap[idx] = existingAttribute
+
 		}
 	}
 
@@ -245,41 +246,39 @@ func transformRequest(m map[string]string) map[string]interface{} {
 		}
 	}
 
-	frs, err := json.MarshalIndent(rs, "", "  ")
-	tempMust(err)
-	fmt.Println(string(frs))
+	resp, err := json.Marshal(&rs)
+	if err != nil {
+		log.Printf("Encountered an error: %v", err)
+        return nil, err
+	}
 
-	var again map[string]interface{}
-	err = json.Unmarshal(frs, &again)
-	tempMust(err)
+	log.Println("Response:", string(resp))
 
-	return again
+	return resp, nil
 }
 
-func tempMust(err error) {
+func sendToWebhook(input []byte) {
+	resp, err := http.Post(config.WebhookEndpoint, "application/json", bytes.NewBuffer(input))
 	if err != nil {
-		fmt.Println(err)
+		log.Println("Error sending request to webhook:", err)
+		return
 	}
-}
+	defer resp.Body.Close()
 
-func sendToWebhook(input *bytes.Reader) {
-	resp, err := http.Post(config.WebhookEndpoint, "application/json", input)
+	log.Println("Webhook response status:", resp.Status)
+
+	if resp.StatusCode == http.StatusOK {
+		state.WebhookSuccess++
+	} else {
+		state.WebhookFailure++
+	}
+
+	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Println(err)
+		log.Println("Error reading webhook response:", err)
+		return
 	}
-	log.Println(resp.Status)
-
-    if resp.StatusCode == http.StatusOK {
-        state.WebhookSuccess += 1
-    } else {
-        state.WebhookFailure += 1
-    }
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Println(err)
-	}
-    log.Println("Webhook response:", string(body))
+	log.Println("Webhook response body:", string(responseBody))
 }
 
 func statsHandler(w http.ResponseWriter, r *http.Request) {

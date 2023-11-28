@@ -32,7 +32,7 @@ func readOutput(filename string) []byte {
 	err = json.Unmarshal(f, &want)
 	must(err)
 
-	// Marshalling twice to reorder keys alphabetically
+    // Marshalling twice to order keys lexographically
 	wantJson, err := json.Marshal(want)
 	must(err)
 
@@ -54,13 +54,18 @@ func TestTransformRequest(t *testing.T) {
 		t.Run(testname, func(t *testing.T) {
 
 			input := readInput(tt.inputFilename)
-			wantJson := readOutput(tt.wantFilename)
+			want := readOutput(tt.wantFilename)
+            fmt.Println(string(want))
 
-			output := transformRequest(input)
-			outputJson, err := json.Marshal(output)
-			must(err)
+			output, err := transformRequest(input)
+            // Marshalling twice to order keys lexographically
+            var outputMap map[string]interface{}
+            err = json.Unmarshal(output, &outputMap)
+            must(err)
+            outputJson, err := json.Marshal(outputMap)
+            must(err)
 
-			if string(wantJson) != string(outputJson) {
+			if string(want) != string(outputJson) {
 				t.Fatalf("Test failed")
 			}
 		})
